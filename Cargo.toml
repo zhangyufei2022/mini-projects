@@ -9,10 +9,11 @@ edition = "2021"
 name = "mini-web-server"
 path = "src/bin/web_server.rs"
 
-# [[bin]]
-# name = "mini-redis-server"
-# path = "src/bin/server.rs"
+[[bin]]
+name = "mini-web-server-2"
+path = "src/bin/web_server_2.rs"
 
 [dependencies]
 chrono = "0.4"
 crossbeam = "0.8.1"
+rayon = "1.7"
