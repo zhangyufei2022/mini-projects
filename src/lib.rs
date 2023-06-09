@@ -1,17 +1,15 @@
 //! Implementation of ThreadPool
 
-use std::{
-    sync::{mpsc, Arc, Mutex},
-    thread,
-};
+use std::thread;
 
 use chrono::Utc;
+use crossbeam::channel;
 
 pub struct ThreadPool {
     threads: Vec<Worker>,
     // Worker 结构体需要从线程池 TreadPool 的队列中获取待执行的代码，对于这类场景，消息传递非常适合：我们将使用消息通道(channel)作为任务队列。
     // 这里sender时通道的发送端
-    sender: Option<mpsc::Sender<Job>>,
+    sender: Option<channel::Sender<Job>>,
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -28,8 +26,9 @@ impl ThreadPool {
         assert!(size > 0);
 
         let mut threads = Vec::with_capacity(size);
-        let (sender, receiver) = mpsc::channel();
-        let receiver = Arc::new(Mutex::new(receiver));
+        // let (sender, receiver) = mpsc::channel();
+        // let receiver = Arc::new(Mutex::new(receiver));
+        let (sender, receiver) = channel::unbounded::<Job>();
 
         for i in 0..size {
             threads.push(Worker::new(i, receiver.clone()));
@@ -78,10 +77,10 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(id: usize, reciever: Arc<Mutex<mpsc::Receiver<Job>>>) -> Self {
+    fn new(id: usize, reciever: channel::Receiver<Job>) -> Self {
         let handle = thread::spawn(move || loop {
             // receiver关闭之后，接收端recv()会返回一个错误，这里根据接收的消息进行不同的处理
-            let job = reciever.lock().unwrap().recv();
+            let job = reciever.recv();
             if let Ok(job) = job {
                 println!("Worker {id} got a job at [{}]; executing.", Utc::now());
                 job();
