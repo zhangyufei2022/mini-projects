@@ -14,6 +14,10 @@ name = "mini-web-server-2"
 path = "src/bin/web_server_2.rs"
 
 [[bin]]
+name = "mini-async-web-server"
+path = "src/bin/async_web_server.rs"
+
+[[bin]]
 name = "mini-timer-future"
 path = "src/bin/timer_future.rs"
 
@@ -22,3 +26,7 @@ chrono = "0.4"
 crossbeam = "0.8.1"
 rayon = "1.7"
 futures = "0.3"
+
+[dependencies.async-std]
+version = "1.6"
+features = ["attributes"]
