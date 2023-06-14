@@ -1,34 +1,32 @@
-use std::{
-    fs,
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    time::Duration,
-};
+use std::{fs, time::Duration};
 
-use async_std::task;
+use async_std::{
+    io::{ReadExt, WriteExt},
+    net::{TcpListener, TcpStream},
+    task,
+};
+use futures::StreamExt;
 
 #[async_std::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-
-    // listener.incoming 会在当前阻塞式监听
-    // take 方法限制迭代的最大次数
-    for stream in listener.incoming().take(5) {
-        match stream {
-            Ok(stream) => {
-                handle_connection(stream).await;
-            }
-            Err(err) => {
-                eprintln!("Failed to get tcpstream, reason:{}", err);
-            }
-        }
-    }
+    /*
+    异步版本的 TcpListener 为 listener.incoming() 实现了 Stream 特征，以上修改有两个好处:
+    listener.incoming() 不再阻塞
+    使用 for_each_concurrent 并发地处理从 Stream 获取的元素
+    */
+    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
+    listener
+        .incoming()
+        .for_each_concurrent(/* 并发数限制 */ 5, |stream| async move {
+            task::spawn(handle_connection(stream.unwrap()));
+        })
+        .await;
 }
 
 async fn handle_connection(mut stream: TcpStream) {
     println!("start...");
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    stream.read(&mut buffer).await.unwrap();
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -50,12 +48,13 @@ async fn handle_connection(mut stream: TcpStream) {
     };
     let len = contents.len();
     let response = format!("{code}\r\nContent-Length: {len}\r\n\r\n{contents}");
-    let result = stream.write_all(response.as_bytes());
+    let result = stream.write_all(response.as_bytes()).await;
     match result {
         Ok(_) => println!("http response: {:#?}", response),
         Err(err) => {
             eprintln!("Failed to respond, reason:{}", err);
         }
     }
+    stream.flush().await.unwrap();
     println!("finish...");
 }
