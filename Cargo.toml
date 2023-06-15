@@ -21,6 +21,10 @@ path = "src/bin/async_web_server.rs"
 name = "mini-timer-future"
 path = "src/bin/timer_future.rs"
 
+[[bin]]
+name = "myredis"
+path = "src/bin/myredis.rs"
+
 [dependencies]
 chrono = "0.4"
 crossbeam = "0.8.1"
