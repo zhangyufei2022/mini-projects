@@ -22,8 +22,12 @@ name = "mini-timer-future"
 path = "src/bin/timer_future.rs"
 
 [[bin]]
-name = "myredis"
-path = "src/bin/myredis.rs"
+name = "myredis-server"
+path = "src/bin/myredis_server.rs"
+
+[[bin]]
+name = "myredis-client"
+path = "src/bin/myredis_client.rs"
 
 [dependencies]
 chrono = "0.4"
