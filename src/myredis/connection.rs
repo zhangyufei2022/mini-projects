@@ -3,13 +3,13 @@ use std::io::Cursor;
 use bytes::{Buf, BytesMut};
 use mini_redis::frame::Error::Incomplete;
 use mini_redis::{Frame, Result};
-use tokio::io::AsyncReadExt;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
 const BUFFER_LEN: usize = 4096;
 
 pub struct Connection {
-    stream: TcpStream,
+    stream: BufWriter<TcpStream>,
     // 对frame进行读写的缓冲区，这里使用 BytesMut 作为缓冲区类型，它是 Bytes 的可变版本。
     buffer: BytesMut,
 }
@@ -17,7 +17,7 @@ pub struct Connection {
 impl Connection {
     pub fn new(stream: TcpStream) -> Self {
         Connection {
-            stream,
+            stream: BufWriter::new(stream),
             buffer: BytesMut::with_capacity(BUFFER_LEN),
         }
     }
@@ -74,6 +74,54 @@ impl Connection {
         }
     }
 
-    // todo:
-    // pub async fn qrite_frame(&mut self, frame: &Frame) -> Result<()> {}
+    // 为了降低系统调用的次数，我们需要使用一个写入缓冲区，当写入一个帧时，首先会写入该缓冲区，
+    // 然后等缓冲区数据足够多时，再集中将其中的数据写入到 socket 中，这样就将多次系统调用优化减少到一次。
+    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+        match frame {
+            Frame::Simple(val) => {
+                self.stream.write_u8(b'+').await?;
+                self.stream.write_all(val.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            }
+            Frame::Error(val) => {
+                self.stream.write_u8(b'-').await?;
+                self.stream.write_all(val.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            }
+            Frame::Integer(val) => {
+                self.stream.write_u8(b':').await?;
+                self.write_decimal(*val).await?;
+            }
+            Frame::Bulk(val) => {
+                let len = val.len();
+                self.stream.write_u8(b'$').await?;
+                self.write_decimal(len as u64).await?;
+                self.stream.write_all(val).await?;
+                self.stream.write_all(b"\r\n").await?;
+            }
+            Frame::Null => {
+                self.stream.write_all(b"$-1\r\n").await?;
+            }
+            Frame::Array(_) => todo!(),
+        }
+        self.stream.flush().await?;
+
+        Ok(())
+    }
+
+    /// Write a decimal frame to the stream
+    async fn write_decimal(&mut self, val: u64) -> io::Result<()> {
+        use std::io::Write;
+
+        // Convert the value to a string
+        let mut buf = [0u8; 20];
+        let mut buf = Cursor::new(&mut buf[..]);
+        write!(&mut buf, "{}", val)?;
+
+        let pos = buf.position() as usize;
+        self.stream.write_all(&buf.get_ref()[..pos]).await?;
+        self.stream.write_all(b"\r\n").await?;
+
+        Ok(())
+    }
 }

@@ -22,7 +22,8 @@ async fn main() {
 }
 
 async fn handle_connection(socket: TcpStream, db: Db) {
-    use mini_redis::{Command, Connection, Frame};
+    use mini_projects::Connection;
+    use mini_redis::{Command, Frame};
 
     // `Connection` 对于 redis 的读写进行了抽象封装，因此我们读到的是一个一个数据帧frame(数据帧 = redis命令 + 数据)，而不是字节流
     // `Connection` 是在 mini-redis 中定义
