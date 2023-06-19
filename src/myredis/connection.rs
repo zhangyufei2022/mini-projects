@@ -3,7 +3,7 @@ use std::io::Cursor;
 use bytes::{Buf, BytesMut};
 use mini_redis::frame::Error::Incomplete;
 use mini_redis::{Frame, Result};
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
 const BUFFER_LEN: usize = 4096;
@@ -76,7 +76,7 @@ impl Connection {
 
     // 为了降低系统调用的次数，我们需要使用一个写入缓冲区，当写入一个帧时，首先会写入该缓冲区，
     // 然后等缓冲区数据足够多时，再集中将其中的数据写入到 socket 中，这样就将多次系统调用优化减少到一次。
-    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
         match frame {
             Frame::Simple(val) => {
                 self.stream.write_u8(b'+').await?;
@@ -110,7 +110,7 @@ impl Connection {
     }
 
     /// Write a decimal frame to the stream
-    async fn write_decimal(&mut self, val: u64) -> io::Result<()> {
+    async fn write_decimal(&mut self, val: u64) -> Result<()> {
         use std::io::Write;
 
         // Convert the value to a string

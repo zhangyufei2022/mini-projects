@@ -680,6 +680,7 @@ dependencies = [
  "mini-redis",
  "rayon",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

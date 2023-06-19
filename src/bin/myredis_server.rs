@@ -4,8 +4,9 @@ use std::{
 };
 
 use bytes::Bytes;
+use mini_redis::Result;
 use tokio::net::{TcpListener, TcpStream};
-
+use tracing::{debug, error, info};
 type Db = Arc<Mutex<HashMap<String, Bytes>>>;
 
 #[tokio::main]
@@ -13,15 +14,32 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let db: Db = Arc::new(Mutex::new(HashMap::new()));
 
-    loop {
-        let (socket, addr) = listener.accept().await.unwrap();
-        println!("socket addr: {:?}", addr);
-        let db = db.clone();
-        tokio::spawn(async move { handle_connection(socket, db).await });
+    tokio::select! {
+        res = run(&listener, &db) => {
+            if let Err(err) = res {
+                error!(cause = %err, "failed to accept");
+            }
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("shutting down");
+        }
     }
 }
 
-async fn handle_connection(socket: TcpStream, db: Db) {
+async fn run(listener: &TcpListener, db: &Db) -> Result<()> {
+    loop {
+        let (socket, addr) = listener.accept().await?;
+        debug!("socket addr: {:?}", addr);
+        let db = db.clone();
+        tokio::spawn(async move {
+            if let Err(err) = handle_connection(socket, db).await {
+                error!(cause = ?err, "connection error");
+            }
+        });
+    }
+}
+
+async fn handle_connection(socket: TcpStream, db: Db) -> Result<()> {
     use mini_projects::Connection;
     use mini_redis::{Command, Frame};
 
@@ -29,10 +47,10 @@ async fn handle_connection(socket: TcpStream, db: Db) {
     // `Connection` 是在 mini-redis 中定义
     let mut connection = Connection::new(socket);
 
-    while let Some(frame) = connection.read_frame().await.unwrap() {
+    while let Some(frame) = connection.read_frame().await? {
         println!("Got frame: {:?}", frame);
 
-        let cmd = Command::from_frame(frame).unwrap();
+        let cmd = Command::from_frame(frame)?;
         println!("cmd: {:?}", cmd);
 
         let response = match cmd {
@@ -51,6 +69,8 @@ async fn handle_connection(socket: TcpStream, db: Db) {
             }
             cmd => panic!("unimplemented {:?}", cmd),
         };
-        connection.write_frame(&response).await.unwrap();
+        connection.write_frame(&response).await?;
     }
+
+    Ok(())
 }
